@@ -1,0 +1,171 @@
+---
+title: "HD-OCT"
+author: "Pavel Dusek"
+date: "19 4 2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(lmerTest)
+library(ggplot2)
+library(dplyr)
+library(effectsize)
+library(knitr)
+```
+
+## Software Info
+
+Built with R version `r getRversion()`, lmerTest version `r packageVersion("lmerTest")`, effectsize version `r packageVersion("effectsize")`, ggplot2 version `r packageVersion("ggplot2")`, dplyr version `r packageVersion("dplyr")`.
+
+## Data Description
+We load the dataset:
+```{r}
+df <- read.csv('clean_data.csv')
+colnames(df)
+dim(df)
+```
+
+To get descriptive statistics of the visits, we get parameters that are unique for each visits and remove duplicates:
+```{r}
+visits <- df[ , c("record_id", "age", "gender", "group", "uhdrs_tms", "uhdrs_tfc", "disease_length")]
+visits <- visits[ !duplicated(visits), ]
+```
+
+To get descriptive statistics of the subjects, we get parameters that are unique for each subject and remove duplicates:
+```{r}
+subjects <- df[ , c("record_id", "gender", "group", "triplet_longer")]
+subjetcs <- subjects[ !duplicated(subjects), ]
+```
+
+### How many eyes, visits and subjects are there?
+How many measurements for each group?
+```{r, echo=FALSE}
+df %>% count( group )
+```
+
+How many 
+
+### Do the groups differ in age?
+Wilcox test:
+```{r, echo=FALSE}
+wilcox.test( age ~ group, visits)
+```
+
+### Do the groups differ in gender?
+```{r, echo=FALSE}
+fisher.test(table(subjects[ , c("gender", "group") ]))
+```
+
+### Other stats
+```{r}
+visits   %>% group_by( group ) %>% summarize( age_mean = mean(age), age_sd = sd(age) )
+subjects %>% count( group )
+visits   %>% count( group )
+subjects %>% filter( group == 'patients' ) %>% count( gender )
+subjects %>% filter( group == 'controls' ) %>% count( gender )
+subjects %>% filter( group == 'patients' ) %>% summarize( cag = mean(triplet_longer), cag_sd = sd(triplet_longer) )
+visits   %>% filter( group == 'patients' ) %>%
+	summarize(
+	    tfc = mean(uhdrs_tfc),
+	    tfc_sd = sd(uhdrs_tfc),
+	    tms = mean(uhdrs_tms),
+	    tms_sd = sd(uhdrs_tms),
+	    duration = mean(disease_length),
+	    duration_sd = sd(disease_length)
+	) 
+
+```
+
+## Group comparison mixed effects model
+
+### RNFL G
+```{r}
+model1 <- lmer(oct_rnfl_g ~ group + age + gender + (1 | record_id), df )
+summary(model1)
+```
+
+### RNFL T
+```{r}
+model2 <- lmer(oct_rnfl_t ~ group + age + gender + (1 | record_id), df )
+summary(model2)
+```
+
+### Macular Volume
+```{r}
+model3 <- lmer(oct_macular_vol ~ group + age + gender + (1 | record_id), df )
+summary(model3)
+```
+
+## HD group mixed effects model
+We analyzed effect of UHDRS TMS and disease duration on RNFL G, RNFL T and macular volume in the HD group:
+```{r}
+hd <- df %>% filter(group == 'patients')
+```
+
+### RNFL G
+```{r}
+model4 <- lmer(oct_rnfl_g ~ uhdrs_tms + disease_length + (1 | record_id), hd )
+summary(model4)
+```
+
+### RNFL T
+```{r}
+model5 <- lmer(oct_rnfl_t ~ uhdrs_tms + disease_length + (1 | record_id), hd )
+summary(model5)
+```
+
+### Macular Volume
+```{r}
+model6 <- lmer(oct_macular_vol ~ uhdrs_tms + disease_length + (1 | record_id), hd )
+summary(model6)
+```
+## P values false discovery rate
+```{r echo=FALSE}
+interpret <- function(p) {
+	if (p < 0.001) {
+		return("***")
+	} else if (p < 0.01) {
+		return("**")
+	} else if (p < 0.05) {
+		return("*")
+	} else if (p < 0.10) {
+		return(".")
+	} else {
+		return("")
+	}
+}
+```
+```{r}
+p.values1 <- summary(model1)$coefficients[, "Pr(>|t|)"]
+p.values2 <- summary(model2)$coefficients[, "Pr(>|t|)"]
+p.values3 <- summary(model3)$coefficients[, "Pr(>|t|)"]
+p.values4 <- summary(model4)$coefficients[, "Pr(>|t|)"]
+p.values5 <- summary(model5)$coefficients[, "Pr(>|t|)"]
+p.values6 <- summary(model6)$coefficients[, "Pr(>|t|)"]
+
+p.values <- tibble(
+		   name = c(
+			    'g_intercept', 'g_group', 'g_age', 'g_gender',
+			    't_intercept', 't_group', 't_age', 't_gender',
+			    'm_intercept', 'm_group', 'm_age', 'm_gender',
+			    'hdg_intercept', 'g_tms', 'g_disease_length',
+			    'hdt_intercept', 't_tms', 't_disease_length',
+			    'hdm_intercept', 'm_tms', 'm_disease_length'
+			    ),
+		   p = c(p.values1, p.values2, p.values3, p.values4, p.values5, p.values6)
+	)
+p.values <- p.values %>% mutate( p.BH = p.adjust(p, method="BH"), interpret = lapply(p.BH, interpret) )
+kable(p.values, caption = 'Adjusted p values for false discovery rate.')
+```
+
+## Effect size
+```{r}
+g1 <- tibble(hedges_g(oct_rnfl_g      ~ group, data = df))
+g2 <- tibble(hedges_g(oct_rnfl_t      ~ group, data = df))
+g3 <- tibble(hedges_g(oct_macular_vol ~ group, data = df))
+g <- rbind(g1, g2, g3)
+g <- g %>% mutate( name = c( 'rnfl_g', 'rnfl_t', 'macular') )
+kable(g, caption = 'Effect size of group on OCT parameters.')
+```
