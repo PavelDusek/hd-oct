@@ -183,7 +183,13 @@ summary(model8)
 
 Scatter plot of macular volume vs. age in patient and control group.
 ```{r}
-ggplot( data = df, aes(x = age, y = oct_macular_vol)) + geom_point(aes(color=group)) + geom_smooth(aes(color=group), method='lm')
+plot <- ggplot( data = df, aes(x = age, y = oct_macular_vol)) +
+	geom_point(aes(color=group)) +
+	geom_smooth(aes(color=group), method='lm') +
+	xlab('age [years]') +
+	ylab(bquote('Macular Volume ['~mm^3~']'))
+ggsave("plot.png", plot)
+plot
 ```
 
 Correlation analysis of macular volume and CAG triplet extension in patient group.
