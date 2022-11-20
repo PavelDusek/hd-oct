@@ -1,7 +1,7 @@
 ---
 title: "HD-OCT"
 author: "Pavel Dusek"
-date: "19 4 2022"
+date: "19 11 2022"
 output: html_document
 ---
 
@@ -25,6 +25,9 @@ We load the dataset:
 df <- read.csv('clean_data.csv')
 colnames(df)
 dim(df)
+hd <- df %>% filter(group == 'patients') #patient group
+hd_macular_nna <- hd %>% filter( !is.na(oct_macular_vol) ) #patient group without missing data in macular volume
+
 ```
 
 To get descriptive statistics of the visits, we get parameters that are unique for each visits and remove duplicates:
@@ -36,7 +39,7 @@ visits <- visits[ !duplicated(visits), ]
 To get descriptive statistics of the subjects, we get parameters that are unique for each subject and remove duplicates:
 ```{r}
 subjects <- df[ , c("record_id", "gender", "group", "triplet_longer")]
-subjetcs <- subjects[ !duplicated(subjects), ]
+subjects <- subjects[ !duplicated(subjects), ]
 ```
 
 ### How many eyes, visits and subjects are there?
@@ -44,8 +47,6 @@ How many measurements for each group?
 ```{r, echo=FALSE}
 df %>% count( group )
 ```
-
-How many 
 
 ### Do the groups differ in age?
 Wilcox test:
@@ -99,11 +100,7 @@ summary(model3)
 ```
 
 ## HD group mixed effects model
-We analyzed effect of UHDRS TMS and disease duration on RNFL G, RNFL T and macular volume in the HD group:
-```{r}
-hd <- df %>% filter(group == 'patients')
-```
-
+We analyzed effect of UHDRS TMS and disease duration on RNFL G, RNFL T and macular volume in the HD group.
 ### RNFL G
 ```{r}
 model4 <- lmer(oct_rnfl_g ~ uhdrs_tms + disease_length + (1 | record_id), hd )
@@ -168,4 +165,33 @@ g3 <- tibble(hedges_g(oct_macular_vol ~ group, data = df))
 g <- rbind(g1, g2, g3)
 g <- g %>% mutate( name = c( 'rnfl_g', 'rnfl_t', 'macular') )
 kable(g, caption = 'Effect size of group on OCT parameters.')
+```
+
+## Macular Volume Post Hoc Analysis
+```{r}
+```
+
+```{r}
+model7 <- lmer(oct_macular_vol ~ group + age + gender + group*age + (1 | record_id), df )
+summary(model7)
+```
+
+```{r}
+model8 <- lmer( oct_macular_vol ~ triplet_longer * age + (1 | record_id), data = hd_macular_nna )
+summary(model8)
+```
+
+Scatter plot of macular volume vs. age in patient and control group.
+```{r}
+ggplot( data = df, aes(x = age, y = oct_macular_vol)) + geom_point(aes(color=group)) + geom_smooth(aes(color=group), method='lm')
+```
+
+Correlation analysis of macular volume and CAG triplet extension in patient group.
+```{r}
+cor.test(hd_macular_nna$oct_macular_vol, hd_macular_nna$triplet_longer)
+```
+
+Correlation analysis of macular volume and age in patient group.
+```{r}
+cor.test(hd_macular_nna$oct_macular_vol, hd_macular_nna$age)
 ```
